@@ -5,11 +5,27 @@ const config = require('./settings.json');
 const express = require('express');
 const http = require('http');
 
+// Autonomous Brain Foundation
+const AgentBrain = require('./src/brain/AgentBrain');
+const createBrainRouter = require('./src/api/brainApi');
+
+// Initialize Autonomous Brain (defaults to AFK mode to preserve legacy behavior)
+const brain = new AgentBrain({
+  tickIntervalMs: 1000,
+  initialMode: 'AFK',
+  maxTelemetryEvents: 300
+});
+brain.initialize();
+brain.start();
+
 // ============================================================
-// EXPRESS SERVER - Keep Render/Aternos alive
+// EXPRESS SERVER - Keep Render/Aternos alive & Brain Web UI
 // ============================================================
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = 3000;
+
+app.use(express.json());
+app.use('/api/brain', createBrainRouter(brain));
 
 // Bot state tracking
 let botState = {
@@ -21,79 +37,290 @@ let botState = {
 };
 
 // Health check endpoint for monitoring
-// Health check endpoint for monitoring
 app.get('/', (req, res) => {
-  // "Blue Teal Shadow" Theme - Live Dashboard
+  // "Blue Teal Shadow" Theme - Live Dashboard with Autonomous Brain Foundation
   res.send(`
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
       <head>
-        <title>${config.name} Status</title>
+        <title>${config.name} - Agent Dashboard</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
+          * { box-sizing: border-box; }
           body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             background: #0f172a; 
             color: #f8fafc; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
             margin: 0; 
-            overflow: hidden;
+            padding: 24px;
+            min-height: 100vh;
+            overflow-y: auto;
           }
-          .container {
+          .dashboard-header {
+            max-width: 1200px;
+            margin: 0 auto 24px auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 16px;
+          }
+          .dashboard-header h1 {
+            margin: 0;
+            font-size: 22px;
+            color: #ccfbf1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+          .badge-phase {
+            font-size: 11px;
+            background: rgba(45, 212, 191, 0.15);
+            color: #2dd4bf;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            border: 1px solid #2dd4bf;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+          }
+          .grid-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 24px;
+          }
+          .card {
             background: #1e293b;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 0 50px rgba(45, 212, 191, 0.2);
-            text-align: center;
-            width: 400px;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
             border: 1px solid #334155;
-            transition: box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
           }
-          h1 { margin-bottom: 30px; font-size: 24px; color: #ccfbf1; display: flex; align-items: center; justify-content: center; gap: 10px; }
+          .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #ccfbf1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #334155;
+          }
           .stat-card {
             background: #0f172a;
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 12px;
-            border-left: 5px solid #2dd4bf;
-            text-align: left;
-            box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.3);
-            position: relative;
-            overflow: hidden;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border-left: 4px solid #2dd4bf;
           }
-          .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
-          .value { font-size: 18px; font-weight: bold; color: #2dd4bf; text-shadow: 0 0 10px rgba(45, 212, 191, 0.5); margin-top: 5px; }
+          .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.8px; }
+          .value { font-size: 16px; font-weight: 600; color: #2dd4bf; margin-top: 4px; word-break: break-all; }
+          
+          /* Status dot */
           .status-dot { 
-            height: 12px; width: 12px; 
+            height: 10px; width: 10px; 
             border-radius: 50%; 
             display: inline-block; 
-            margin-right: 8px;
-            box-shadow: 0 0 10px currentColor;
-            transition: color 0.3s ease, box-shadow 0.3s ease;
-            background-color: currentColor; /* Use CSS for the dot color */
+            margin-right: 6px;
+            box-shadow: 0 0 8px currentColor;
+            background-color: currentColor;
           }
-          /* Override specific IDs to set background color for the dot */
-          #live-indicator { background-color: currentColor; }
-          
           .pulse { animation: pulse 2s infinite; }
           @keyframes pulse {
             0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.1); }
+            50% { opacity: 0.4; transform: scale(1.15); }
             100% { opacity: 1; transform: scale(1); }
           }
+
+          /* Mode Switcher */
+          .mode-buttons {
+            display: flex;
+            gap: 8px;
+            background: #0f172a;
+            padding: 4px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+          }
+          .btn-mode {
+            flex: 1;
+            background: transparent;
+            color: #94a3b8;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+          }
+          .btn-mode:hover { color: #f8fafc; background: rgba(255, 255, 255, 0.05); }
+          .btn-mode.active {
+            background: #2dd4bf;
+            color: #0f172a;
+            box-shadow: 0 0 12px rgba(45, 212, 191, 0.4);
+          }
+
+          /* Buttons & Controls */
+          .btn-action {
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+          }
+          .btn-action:hover { opacity: 0.85; }
+          .btn-start { background: #4ade80; color: #052e16; }
+          .btn-pause { background: #facc15; color: #422006; }
+          .btn-cancel { background: #f87171; color: #450a0a; }
+
           .btn-guide {
-            display: inline-block; margin-top: 20px; padding: 12px 24px; 
-            background: #2dd4bf; color: #0f172a; text-decoration: none; 
-            border-radius: 8px; font-weight: bold; 
-            box-shadow: 0 0 15px rgba(45, 212, 191, 0.4);
+            display: block;
+            text-align: center;
+            padding: 10px 16px; 
+            background: #2dd4bf;
+            color: #0f172a;
+            text-decoration: none; 
+            border-radius: 8px;
+            font-weight: 700; 
+            font-size: 13px;
+            box-shadow: 0 0 12px rgba(45, 212, 191, 0.3);
             transition: transform 0.2s;
           }
-          .btn-guide:hover { transform: translateY(-2px); }
+          .btn-guide:hover { transform: translateY(-1px); }
+
+          /* Task Items & Queue */
+          .task-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+          }
+          .task-input {
+            flex: 1;
+            background: #0f172a;
+            border: 1px solid #334155;
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: #f8fafc;
+            font-size: 12px;
+          }
+          .task-input:focus { outline: 1px solid #2dd4bf; }
+          .task-select {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #f8fafc;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+          }
+          .btn-create-task {
+            background: #2dd4bf;
+            color: #0f172a;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+          }
+          .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 240px;
+            overflow-y: auto;
+            padding-right: 4px;
+          }
+          .task-item {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+          .task-item-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          .task-name { font-size: 13px; font-weight: 600; color: #f8fafc; }
+          .task-pill {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+          .pill-running { background: rgba(74, 222, 128, 0.2); color: #4ade80; border: 1px solid #4ade80; }
+          .pill-pending { background: rgba(250, 204, 21, 0.2); color: #facc15; border: 1px solid #facc15; }
+          .pill-paused { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; }
+          .pill-completed { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid #38bdf8; }
+          .pill-failed { background: rgba(248, 113, 113, 0.2); color: #f87171; border: 1px solid #f87171; }
+          .pill-cancelled { background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid #94a3b8; }
+          
+          .progress-bar-bg {
+            height: 4px;
+            background: #334155;
+            border-radius: 2px;
+            overflow: hidden;
+          }
+          .progress-bar-fill {
+            height: 100%;
+            background: #2dd4bf;
+            transition: width 0.3s ease;
+          }
+
+          /* Activity Feed */
+          .activity-log {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            height: 240px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+          .log-entry {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            line-height: 1.4;
+          }
+          .log-time { color: #64748b; white-space: nowrap; }
+          .log-type {
+            font-size: 9px;
+            padding: 1px 5px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: bold;
+            white-space: nowrap;
+          }
+          .type-state { background: #3b82f6; color: #fff; }
+          .type-task { background: #8b5cf6; color: #fff; }
+          .type-action { background: #06b6d4; color: #fff; }
+          .type-decision { background: #10b981; color: #fff; }
+          .type-goal { background: #f59e0b; color: #fff; }
+          .type-system { background: #475569; color: #fff; }
+          .type-error { background: #ef4444; color: #fff; }
+          .log-msg { color: #cbd5e1; word-break: break-word; }
+
           .connection-bar {
-            height: 4px; background: #334155; width: 100%; margin-top: 20px; border-radius: 2px; overflow: hidden;
+            height: 3px; background: #334155; width: 100%; border-radius: 2px; overflow: hidden;
           }
           .connection-fill {
             height: 100%; width: 100%; background: #2dd4bf;
@@ -107,41 +334,119 @@ app.get('/', (req, res) => {
         </style>
       </head>
       <body>
-        <div class="container" id="main-container">
+        <div class="dashboard-header">
           <h1>
-            <span id="live-indicator" class="status-dot pulse" style="color: #ef4444;"></span> 
+            <span id="live-indicator" class="status-dot pulse" style="color: #ef4444;"></span>
             ${config.name}
           </h1>
-          
-          <div class="stat-card">
-            <div class="label">Status</div>
-            <div class="value" id="status-text">Connecting...</div>
+          <span class="badge-phase">Phase 1: Autonomous Brain Foundation</span>
+        </div>
+
+        <div class="grid-container">
+          <!-- CARD 1: Bot Connection & Minecraft Status -->
+          <div class="card">
+            <h2 class="card-title">
+              <span>Minecraft Presence</span>
+              <span id="bot-status-badge" class="task-pill pill-pending">Connecting</span>
+            </h2>
+
+            <div class="stat-card">
+              <div class="label">Bot Status</div>
+              <div class="value" id="status-text">Connecting...</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="label">Server Connection</div>
+              <div class="value">${config.server.ip}:${config.server.port}</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="label">World Position</div>
+              <div class="value" id="coords-text">Waiting for spawn...</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="label">Uptime</div>
+              <div class="value" id="uptime-text">0h 0m 0s</div>
+            </div>
+
+            <a href="/tutorial" class="btn-guide">View Setup & Deployment Guide</a>
+
+            <div class="connection-bar">
+              <div class="connection-fill"></div>
+            </div>
           </div>
 
-          <div class="stat-card">
-            <div class="label">Uptime</div>
-            <div class="value" id="uptime-text">0h 0m 0s</div>
+          <!-- CARD 2: Autonomous Brain Foundation Status -->
+          <div class="card">
+            <h2 class="card-title">
+              <span>Autonomous Brain</span>
+              <span id="brain-state-badge" class="task-pill pill-running">IDLE</span>
+            </h2>
+
+            <div>
+              <div class="label" style="margin-bottom: 6px;">Operational Mode</div>
+              <div class="mode-buttons">
+                <button id="mode-btn-afk" class="btn-mode active" onclick="setAgentMode('AFK')">AFK Mode</button>
+                <button id="mode-btn-autonomous" class="btn-mode" onclick="setAgentMode('AUTONOMOUS')">Autonomous</button>
+                <button id="mode-btn-manual" class="btn-mode" onclick="setAgentMode('MANUAL')">Manual</button>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="label">Current Decision & Reason</div>
+              <div class="value" id="decision-text" style="font-size: 13px; color: #e2e8f0; font-weight: normal;">
+                Evaluating state...
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="label">Active Goal</div>
+              <div class="value" id="active-goal-text">None</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="label">Active Task / Action</div>
+              <div class="value" id="active-task-text">None (Action: IDLE)</div>
+            </div>
           </div>
 
-          <div class="stat-card">
-            <div class="label">Coordinates</div>
-            <div class="value" id="coords-text">Waiting...</div>
+          <!-- CARD 3: Task Queue & Management -->
+          <div class="card">
+            <h2 class="card-title">
+              <span>Task Management</span>
+              <span id="task-count-badge" style="font-size: 12px; color: #94a3b8;">0 tasks</span>
+            </h2>
+
+            <form class="task-form" onsubmit="handleCreateTask(event)">
+              <input id="new-task-name" class="task-input" type="text" placeholder="Task name (e.g. Survey area, Stop bot)" required maxlength="100" />
+              <select id="new-task-priority" class="task-select">
+                <option value="10">High (10)</option>
+                <option value="8">Elevated (8)</option>
+                <option value="5" selected>Normal (5)</option>
+                <option value="2">Low (2)</option>
+              </select>
+              <button type="submit" class="btn-create-task">+ Create</button>
+            </form>
+
+            <div class="task-list" id="task-list-container">
+              <div style="color: #64748b; font-size: 12px; text-align: center; padding: 20px;">
+                No active or queued tasks. Use the form above to add a task.
+              </div>
+            </div>
           </div>
 
-          <div class="stat-card">
-            <div class="label">Server</div>
-            <div class="value">${config.server.ip}</div>
-          </div>
+          <!-- CARD 4: Real-Time Brain Activity Feed -->
+          <div class="card">
+            <h2 class="card-title">
+              <span>Brain Telemetry & Logs</span>
+              <span id="log-count-badge" style="font-size: 12px; color: #94a3b8;">Live feed</span>
+            </h2>
 
-          <a href="/tutorial" class="btn-guide">View Setup Guide</a>
-          
-          <div class="connection-bar">
-            <div class="connection-fill" id="activity-bar"></div>
+            <div class="activity-log" id="activity-log-container">
+              <div style="color: #64748b; text-align: center; padding: 20px;">Connecting to telemetry stream...</div>
+            </div>
           </div>
-          
-          <p style="color: #64748b; font-size: 12px; margin-top: 15px;">
-            Live connection to Bot Process
-          </p>
         </div>
 
         <script>
@@ -152,49 +457,213 @@ app.get('/', (req, res) => {
             return \`\${h}h \${m}m \${s}s\`;
           };
 
-          const updateStats = async () => {
+          const setAgentMode = async (mode) => {
             try {
-              const res = await fetch('/health');
-              const data = await res.json();
-              
-              const statusText = document.getElementById('status-text');
-              const uptimeText = document.getElementById('uptime-text');
-              const coordsText = document.getElementById('coords-text');
-              const liveDot = document.getElementById('live-indicator');
-              const container = document.getElementById('main-container');
-
-              // Update Status
-              if (data.status === 'connected') {
-                statusText.innerHTML = '<span class="status-dot" style="color: #4ade80;"></span> Online & Running';
-                statusText.style.color = '#2dd4bf';
-                liveDot.style.color = '#4ade80'; // Green pulse
-                container.style.boxShadow = '0 0 50px rgba(45, 212, 191, 0.2)';
-              } else {
-                statusText.innerHTML = '<span class="status-dot" style="color: #f87171;"></span> Reconnecting...';
-                statusText.style.color = '#f87171';
-                liveDot.style.color = '#f87171'; // Red pulse
-                container.style.boxShadow = '0 0 50px rgba(248, 113, 113, 0.2)';
+              const res = await fetch('/api/brain/mode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode })
+              });
+              if (res.ok) {
+                updateBrainDashboard();
               }
-
-              // Update Uptime
-              uptimeText.innerText = formatUptime(data.uptime);
-
-              // Update Coords
-              if (data.coords) {
-                coordsText.innerText = \`Coords: \${Math.floor(data.coords.x)}, \${Math.floor(data.coords.y)}, \${Math.floor(data.coords.z)}\`;
-              } else {
-                coordsText.innerText = 'Unknown Location';
-              }
-
-            } catch (e) {
-              document.getElementById('status-text').innerText = 'System Offline';
-              document.getElementById('live-indicator').style.color = '#64748b'; // Grey
+            } catch (err) {
+              console.error('Failed to set agent mode', err);
             }
           };
 
-          // Poll every 1 second
-          setInterval(updateStats, 1000);
-          updateStats();
+          const handleCreateTask = async (e) => {
+            e.preventDefault();
+            const nameInput = document.getElementById('new-task-name');
+            const priorityInput = document.getElementById('new-task-priority');
+            const name = nameInput.value.trim();
+            const priority = parseInt(priorityInput.value, 10) || 5;
+
+            if (!name) return;
+
+            try {
+              const res = await fetch('/api/brain/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, priority })
+              });
+              if (res.ok) {
+                nameInput.value = '';
+                updateBrainDashboard();
+              }
+            } catch (err) {
+              console.error('Failed to create task', err);
+            }
+          };
+
+          const handleTaskAction = async (taskId, action) => {
+            try {
+              const res = await fetch(\`/api/brain/tasks/\${taskId}/\${action}\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              if (res.ok) {
+                updateBrainDashboard();
+              }
+            } catch (err) {
+              console.error(\`Failed to \${action} task\`, err);
+            }
+          };
+
+          const updateBrainDashboard = async () => {
+            try {
+              // 1. Fetch Minecraft server /health
+              const healthRes = await fetch('/health');
+              const healthData = await healthRes.json();
+              
+              const statusText = document.getElementById('status-text');
+              const statusBadge = document.getElementById('bot-status-badge');
+              const uptimeText = document.getElementById('uptime-text');
+              const coordsText = document.getElementById('coords-text');
+              const liveDot = document.getElementById('live-indicator');
+
+              if (healthData.status === 'connected') {
+                statusText.innerHTML = '<span class="status-dot" style="color: #4ade80;"></span> Online & Running';
+                statusBadge.className = 'task-pill pill-running';
+                statusBadge.innerText = 'Connected';
+                liveDot.style.color = '#4ade80';
+              } else {
+                statusText.innerHTML = '<span class="status-dot" style="color: #f87171;"></span> Reconnecting...';
+                statusBadge.className = 'task-pill pill-failed';
+                statusBadge.innerText = 'Reconnecting';
+                liveDot.style.color = '#f87171';
+              }
+
+              uptimeText.innerText = formatUptime(healthData.uptime);
+
+              if (healthData.coords) {
+                coordsText.innerText = \`X: \${Math.floor(healthData.coords.x)}, Y: \${Math.floor(healthData.coords.y)}, Z: \${Math.floor(healthData.coords.z)}\`;
+              } else {
+                coordsText.innerText = 'Waiting for spawn...';
+              }
+
+              // 2. Fetch Brain state
+              const brainRes = await fetch('/api/brain/state');
+              const brainData = await brainRes.json();
+
+              // Mode buttons update
+              ['afk', 'autonomous', 'manual'].forEach(m => {
+                const btn = document.getElementById(\`mode-btn-\${m}\`);
+                if (btn) {
+                  btn.classList.toggle('active', brainData.mode?.toLowerCase() === m);
+                }
+              });
+
+              // State pill
+              const stateBadge = document.getElementById('brain-state-badge');
+              if (stateBadge) {
+                stateBadge.innerText = brainData.state || 'IDLE';
+                stateBadge.className = brainData.state === 'EXECUTING' ? 'task-pill pill-running' :
+                                       brainData.state === 'PAUSED' ? 'task-pill pill-paused' :
+                                       brainData.state === 'ERROR' ? 'task-pill pill-failed' : 'task-pill pill-pending';
+              }
+
+              // Decision
+              const decText = document.getElementById('decision-text');
+              if (decText) {
+                decText.innerText = brainData.decisionReason || 'Standing by.';
+              }
+
+              // Goal
+              const goalText = document.getElementById('active-goal-text');
+              if (goalText) {
+                goalText.innerText = brainData.currentGoal ? \`\${brainData.currentGoal.name} (Priority \${brainData.currentGoal.priority})\` : 'None';
+              }
+
+              // Task / Action
+              const taskText = document.getElementById('active-task-text');
+              if (taskText) {
+                const currentActionName = brainData.currentAction?.name || 'IDLE';
+                const currentTaskName = brainData.currentTask?.name || 'None';
+                taskText.innerText = \`\${currentTaskName} (Action: \${currentActionName})\`;
+              }
+
+              // 3. Fetch Tasks
+              const tasksRes = await fetch('/api/brain/tasks');
+              const tasksData = await tasksRes.json();
+              const taskContainer = document.getElementById('task-list-container');
+              const taskCountBadge = document.getElementById('task-count-badge');
+
+              if (taskCountBadge) {
+                taskCountBadge.innerText = \`\${tasksData.tasks?.length || 0} tasks\`;
+              }
+
+              if (taskContainer && Array.isArray(tasksData.tasks)) {
+                if (tasksData.tasks.length === 0) {
+                  taskContainer.innerHTML = \`<div style="color: #64748b; font-size: 12px; text-align: center; padding: 20px;">No active or queued tasks. Use the form above to add a task.</div>\`;
+                } else {
+                  taskContainer.innerHTML = tasksData.tasks.map(t => {
+                    const pillClass = t.status === 'RUNNING' ? 'pill-running' :
+                                      t.status === 'PENDING' ? 'pill-pending' :
+                                      t.status === 'PAUSED' ? 'pill-paused' :
+                                      t.status === 'COMPLETED' ? 'pill-completed' :
+                                      t.status === 'FAILED' ? 'pill-failed' : 'pill-cancelled';
+
+                    let actionsHtml = '';
+                    if (t.status === 'PENDING') {
+                      actionsHtml = \`<button class="btn-action btn-start" onclick="handleTaskAction('\${t.id}', 'start')">Start</button>
+                                     <button class="btn-action btn-cancel" onclick="handleTaskAction('\${t.id}', 'cancel')">Cancel</button>\`;
+                    } else if (t.status === 'RUNNING') {
+                      actionsHtml = \`<button class="btn-action btn-pause" onclick="handleTaskAction('\${t.id}', 'pause')">Pause</button>
+                                     <button class="btn-action btn-cancel" onclick="handleTaskAction('\${t.id}', 'cancel')">Cancel</button>\`;
+                    } else if (t.status === 'PAUSED') {
+                      actionsHtml = \`<button class="btn-action btn-start" onclick="handleTaskAction('\${t.id}', 'resume')">Resume</button>
+                                     <button class="btn-action btn-cancel" onclick="handleTaskAction('\${t.id}', 'cancel')">Cancel</button>\`;
+                    }
+
+                    return \`
+                      <div class="task-item">
+                        <div class="task-item-header">
+                          <span class="task-name">\${t.name} <span style="font-size: 10px; color: #94a3b8;">(P\${t.priority})</span></span>
+                          <span class="task-pill \${pillClass}">\${t.status}</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                          <div class="progress-bar-fill" style="width: \${t.progress || 0}%;"></div>
+                        </div>
+                        \${actionsHtml ? \`<div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px;">\${actionsHtml}</div>\` : ''}
+                      </div>
+                    \`;
+                  }).join('');
+                }
+              }
+
+              // 4. Fetch Events/Telemetry
+              const eventsRes = await fetch('/api/brain/events?limit=30');
+              const eventsData = await eventsRes.json();
+              const logContainer = document.getElementById('activity-log-container');
+
+              if (logContainer && Array.isArray(eventsData.events)) {
+                if (eventsData.events.length === 0) {
+                  logContainer.innerHTML = \`<div style="color: #64748b; text-align: center; padding: 20px;">No telemetry events recorded yet.</div>\`;
+                } else {
+                  logContainer.innerHTML = eventsData.events.map(ev => {
+                    const time = new Date(ev.timestamp).toLocaleTimeString();
+                    const typeClass = \`type-\${ev.type || 'system'}\`;
+                    const msg = ev.message || JSON.stringify(ev);
+                    return \`
+                      <div class="log-entry">
+                        <span class="log-time">[\${time}]</span>
+                        <span class="log-type \${typeClass}">\${ev.type}</span>
+                        <span class="log-msg">\${msg}</span>
+                      </div>
+                    \`;
+                  }).join('');
+                }
+              }
+
+            } catch (err) {
+              console.error('Dashboard poll error:', err);
+            }
+          };
+
+          // Poll every 1.5 seconds
+          setInterval(updateBrainDashboard, 1500);
+          updateBrainDashboard();
         </script>
       </body>
     </html>
@@ -377,6 +846,9 @@ function createBot() {
       checkTimeoutInterval: 120000 // 2 minutes - detects dead connections without false-positive disconnects
     });
 
+    // Attach bot to autonomous brain perception
+    brain.attachBot(bot);
+
     bot.loadPlugin(pathfinder);
 
     // Connection timeout - if no spawn in 60s, reconnect
@@ -393,6 +865,9 @@ function createBot() {
       botState.lastActivity = Date.now();
       botState.reconnectAttempts = 0;
       isReconnecting = false;
+
+      // Update brain with spawned bot
+      brain.attachBot(bot);
 
       console.log(`[Bot] [+] Successfully spawned on server!`);
       if (config.discord && config.discord.events.connect) {
@@ -446,6 +921,7 @@ function createBot() {
       const wasSpawned = botState.connected;
       console.log(`[Bot] Disconnected: ${reason || 'Unknown reason'}`);
       botState.connected = false;
+      brain.detachBot();
       clearAllIntervals();
 
       if (config.discord && config.discord.events.disconnect && reason !== 'Periodic Rejoin') {
@@ -461,6 +937,7 @@ function createBot() {
       const wasSpawned = botState.connected;
       console.log(`[Bot] Kicked: ${reason}`);
       botState.connected = false;
+      brain.detachBot();
       botState.errors.push({ type: 'kicked', reason, time: Date.now() });
       clearAllIntervals();
 
@@ -550,7 +1027,7 @@ function initializeModules(bot, mcData, defaultMove) {
   // ---------- ANTI-AFK (Simple) ----------
   if (config.utils['anti-afk'].enabled) {
     addInterval(() => {
-      if (bot && botState.connected) {
+      if (bot && botState.connected && brain.state.mode === 'AFK') {
         bot.setControlState('jump', true);
         setTimeout(() => {
           if (bot) bot.setControlState('jump', false);
@@ -607,7 +1084,7 @@ function startCircleWalk(bot, defaultMove) {
   let lastPathTime = 0;
 
   addInterval(() => {
-    if (!bot || !botState.connected) return;
+    if (!bot || !botState.connected || brain.state.mode !== 'AFK') return;
 
     // Rate limit pathfinding
     const now = Date.now();
@@ -629,7 +1106,7 @@ function startCircleWalk(bot, defaultMove) {
 
 function startRandomJump(bot) {
   addInterval(() => {
-    if (!bot || !botState.connected) return;
+    if (!bot || !botState.connected || brain.state.mode !== 'AFK') return;
     try {
       bot.setControlState('jump', true);
       setTimeout(() => {
@@ -644,7 +1121,7 @@ function startRandomJump(bot) {
 
 function startLookAround(bot) {
   addInterval(() => {
-    if (!bot || !botState.connected) return;
+    if (!bot || !botState.connected || brain.state.mode !== 'AFK') return;
     try {
       const yaw = Math.random() * Math.PI * 2;
       const pitch = (Math.random() - 0.5) * Math.PI / 4;

@@ -4,8 +4,11 @@
   "description": "Robust AFK bot for Minecraft servers with infinite uptime.",
   "main": "index.js",
   "scripts": {
+    "dev": "node index.js",
+    "build": "node --check index.js",
     "start": "node index.js",
-    "test": "node --check index.js"
+    "lint": "node --check index.js leaveRejoin.js src/brain/*.js src/actions/*.js src/tasks/*.js src/perception/*.js src/telemetry/*.js src/api/*.js test/*.js",
+    "test": "node test/brain.test.js"
   },
   "author": "Lamgerr",
   "license": "MIT",
