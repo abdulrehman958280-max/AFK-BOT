@@ -105,6 +105,11 @@ class DecisionEngine {
         selectedAction = 'IDLE';
         reason = 'Bot is disconnected or not yet spawned in the Minecraft world; waiting for connection.';
         confidence = 1.0;
+      } else if (context.isSurvivalOverride && task) {
+        const actionEvaluation = this._evaluateTask(task, actionRegistry);
+        selectedAction = actionEvaluation.action;
+        reason = `Survival override active: ${actionEvaluation.reason}`;
+        confidence = 1.0;
       } else if (task && task.status === Task.STATUSES.RUNNING) {
         const actionEvaluation = this._evaluateTask(task, actionRegistry);
         selectedAction = actionEvaluation.action;

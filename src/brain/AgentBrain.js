@@ -9,6 +9,8 @@ const WorldState = require('../perception/WorldState');
 const PerceptionManager = require('../perception/PerceptionManager');
 const BrainLogger = require('../telemetry/BrainLogger');
 const SurvivalEngine = require('../survival/SurvivalEngine');
+const MemoryManager = require('../memory/MemoryManager');
+const ExplorationPlanner = require('../exploration/ExplorationPlanner');
 
 /**
  * AgentBrain
@@ -21,6 +23,7 @@ class AgentBrain {
       tickIntervalMs: options.tickIntervalMs || 1000,
       initialMode: options.initialMode || AgentState.MODES.AFK,
       maxTelemetryEvents: options.maxTelemetryEvents || 300,
+      memoryEnabled: options.memoryEnabled !== false,
       ...options
     };
 
@@ -37,7 +40,16 @@ class AgentBrain {
       maxHistory: this.options.maxHistory || 100,
       ...(this.options.perception || {})
     });
+    
+    this.memoryManager = new MemoryManager({
+      enabled: this.options.memoryEnabled,
+      eventBus: this.eventBus
+    });
+    this.memoryManager.init();
+
     this.survivalEngine = new SurvivalEngine(this.eventBus);
+    this.explorationPlanner = new ExplorationPlanner(this.memoryManager.memory);
+    
     this.logger = new BrainLogger({ maxEvents: this.options.maxTelemetryEvents });
 
     // Connect logger to event bus
@@ -231,6 +243,9 @@ class AgentBrain {
     try {
       // 1. Observe world state
       this.worldState.observe(this.bot);
+      
+      // Update world memory
+      this.memoryManager.update(this.worldState);
 
       // 2. Fetch active and queued objectives
       const activeGoal = this.goalManager.getActiveGoal();
@@ -243,9 +258,35 @@ class AgentBrain {
       
       if (survivalResult.survivalTask) {
         // Survival task overrides current tasks
+        if (activeTask && activeTask.status === 'RUNNING') {
+           this.taskManager.pauseTask(activeTask.id);
+        }
         activeTask = survivalResult.survivalTask;
         nextRunnableTask = null;
         isSurvivalOverride = true;
+      } else {
+        if (!activeTask && !nextRunnableTask) {
+           const pausedTasks = this.taskManager.getAllTasks().filter(t => t.status === 'PAUSED');
+           if (pausedTasks.length > 0) {
+               const highestPriorityPaused = pausedTasks.sort((a,b) => b.priority - a.priority)[0];
+               this.taskManager.resumeTask(highestPriorityPaused.id);
+               activeTask = highestPriorityPaused;
+           } else {
+               // Consider Exploration if no tasks exist
+               const explorationTask = this.explorationPlanner.planExploration(this.worldState);
+               if (explorationTask) {
+                   // createTask accepts params object, not a Task instance, wait planExploration returns a Task instance!
+                   // Let's pass the object representation
+                   const taskParams = {
+                       name: explorationTask.name,
+                       metadata: explorationTask.metadata,
+                       priority: explorationTask.priority
+                   };
+                   const newTask = this.taskManager.createTask(taskParams);
+                   activeTask = this.taskManager.startTask(newTask.id);
+               }
+           }
+        }
       }
 
       // Update state mirror

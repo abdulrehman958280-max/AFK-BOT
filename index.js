@@ -10,6 +10,7 @@ const AgentBrain = require('./src/brain/AgentBrain');
 const createBrainRouter = require('./src/api/brainApi');
 const createWorldRouter = require('./src/api/worldApi');
 const createSurvivalRouter = require('./src/api/survivalApi');
+const createMemoryApi = require('./src/api/memoryApi');
 
 // Initialize Autonomous Brain (defaults to AFK mode to preserve legacy behavior)
 const brain = new AgentBrain({
@@ -30,6 +31,7 @@ app.use(express.json());
 app.use('/api/brain', createBrainRouter(brain));
 app.use('/api/world', createWorldRouter(brain));
 app.use('/api/survival', createSurvivalRouter(brain));
+app.use('/api/memory', createMemoryApi(brain));
 
 // Bot state tracking
 let botState = {

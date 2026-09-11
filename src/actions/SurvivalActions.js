@@ -1,4 +1,7 @@
 const { Action } = require('./Action');
+const { goals } = require('mineflayer-pathfinder');
+const FoodManager = require('../survival/FoodManager');
+const ResourcePlanner = require('../survival/ResourcePlanner');
 
 class EatAction extends Action {
   constructor() {
@@ -6,22 +9,19 @@ class EatAction extends Action {
   }
 
   async execute(context = {}) {
-    const { bot, worldState } = context;
+    const { bot } = context;
     if (!bot || !bot.entity) return { success: false, error: 'Bot not spawned' };
     
-    // Find food in inventory
-    const foodItems = bot.inventory.items().filter(item => 
-      ['apple', 'bread', 'cooked_beef', 'cooked_porkchop', 'carrot', 'potato'].some(name => item.name.includes(name))
-    );
+    const fm = new FoodManager(bot);
+    const missingFood = 20 - bot.food;
+    const bestFood = fm.getBestFood(missingFood);
 
-    if (foodItems.length === 0) {
+    if (!bestFood) {
       return { success: false, error: 'No food in inventory' };
     }
-
-    const food = foodItems[0];
     
     try {
-      await bot.equip(food, 'hand');
+      await bot.equip(bestFood, 'hand');
       await bot.consume();
       return { success: true };
     } catch (e) {
@@ -39,27 +39,13 @@ class EscapeAction extends Action {
     const { bot, worldState } = context;
     if (!bot || !bot.entity) return { success: false, error: 'Bot not spawned' };
     
-    // Simplistic escape: try to run away from the closest hostile
-    const threats = worldState?.threats;
-    if (threats && threats.closestHostile && threats.closestHostile.position) {
-      // Logic would be to pathfind away from threats.closestHostile
-      // For now, we just simulate the goal setup
-      // Phase 3 asks to "Use Pathfinder"
+    const EscapePlanner = require('../survival/EscapePlanner');
+    const planner = new EscapePlanner(bot);
+    const safePos = planner.generateEscapeRoute(worldState);
+
+    if (safePos) {
       try {
-        const { goals } = require('mineflayer-pathfinder');
-        const pos = threats.closestHostile.position;
-        // Move opposite direction
-        const dx = bot.entity.position.x - pos.x;
-        const dz = bot.entity.position.z - pos.z;
-        const dist = Math.sqrt(dx*dx + dz*dz);
-        if (dist > 0) {
-          const normX = dx / dist;
-          const normZ = dz / dist;
-          const targetX = bot.entity.position.x + normX * 10;
-          const targetZ = bot.entity.position.z + normZ * 10;
-          
-          bot.pathfinder.setGoal(new goals.GoalNear(targetX, bot.entity.position.y, targetZ, 2));
-        }
+        bot.pathfinder.setGoal(new goals.GoalNear(safePos.x, safePos.y, safePos.z, 2));
         return { success: true };
       } catch (e) {
         return { success: false, error: `Escape failed: ${e.message}` };
@@ -77,9 +63,18 @@ class FindSafeLocationAction extends Action {
 
   async execute(context = {}) {
     const { bot, worldState } = context;
-    // Just stop for now or move slightly if unsafe
     if (!bot || !bot.entity) return { success: false, error: 'Bot not spawned' };
-    return { success: true };
+    
+    const SafeLocationManager = require('../survival/SafeLocationManager');
+    const slm = new SafeLocationManager(bot);
+    const safePos = slm.findSafeLocation(worldState);
+
+    if (safePos) {
+        bot.pathfinder.setGoal(new goals.GoalNear(safePos.x, safePos.y, safePos.z, 2));
+        return { success: true };
+    }
+    
+    return { success: true, warning: 'No specific safe location found' };
   }
 }
 
@@ -89,11 +84,15 @@ class RecoverAction extends Action {
   }
 
   async execute(context = {}) {
-    const { bot, worldState } = context;
+    const { bot } = context;
     if (!bot || !bot.entity) return { success: false, error: 'Bot not spawned' };
-    // Usually means just standing still securely
     bot.clearControlStates();
-    return { success: true };
+    // In actual implementation, we might wait until health is regenerated or timeout
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ success: true });
+      }, 5000);
+    });
   }
 }
 
@@ -103,9 +102,27 @@ class GatherWoodAction extends Action {
   }
 
   async execute(context = {}) {
-    const { bot, worldState } = context;
+    const { bot } = context;
     if (!bot || !bot.entity) return { success: false, error: 'Bot not spawned' };
-    return { success: false, error: 'Not implemented' }; // Will implement later
+    
+    const rp = new ResourcePlanner(bot);
+    const candidate = rp.findResourceCandidate('WOOD');
+
+    if (candidate && candidate.type === 'block') {
+      try {
+        const block = candidate.block;
+        bot.pathfinder.setGoal(new goals.GoalLookAtBlock(block.position, bot.world));
+        await bot.pathfinder.goto(new goals.GoalNear(block.position.x, block.position.y, block.position.z, 3));
+        
+        // Ensure we are using correct tool (not strictly required for wood, but good practice)
+        await bot.dig(block);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: `Failed to gather wood: ${e.message}` };
+      }
+    }
+
+    return { success: false, error: 'No wood found nearby' };
   }
 }
 
@@ -115,9 +132,33 @@ class GatherStoneAction extends Action {
   }
 
   async execute(context = {}) {
-    const { bot, worldState } = context;
+    const { bot } = context;
     if (!bot || !bot.entity) return { success: false, error: 'Bot not spawned' };
-    return { success: false, error: 'Not implemented' };
+    
+    const rp = new ResourcePlanner(bot);
+    const candidate = rp.findResourceCandidate('STONE');
+
+    if (candidate && candidate.type === 'block') {
+      try {
+        const block = candidate.block;
+        await bot.pathfinder.goto(new goals.GoalNear(block.position.x, block.position.y, block.position.z, 3));
+        
+        // Requires pickaxe to drop stone/cobble
+        const pickaxes = bot.inventory.items().filter(item => item.name.includes('pickaxe'));
+        if (pickaxes.length > 0) {
+            await bot.equip(pickaxes[0], 'hand');
+        } else {
+            return { success: false, error: 'No pickaxe to mine stone' };
+        }
+        
+        await bot.dig(block);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: `Failed to gather stone: ${e.message}` };
+      }
+    }
+
+    return { success: false, error: 'No stone found nearby' };
   }
 }
 
@@ -127,9 +168,15 @@ class CraftAction extends Action {
   }
 
   async execute(context = {}) {
-    const { bot, worldState } = context;
+    const { bot, task } = context;
     if (!bot || !bot.entity) return { success: false, error: 'Bot not spawned' };
-    return { success: false, error: 'Not implemented' };
+    
+    const recipeName = task?.metadata?.recipe;
+    if (!recipeName) return { success: false, error: 'No recipe specified' };
+
+    const CraftingManager = require('../survival/CraftingManager');
+    const cm = new CraftingManager(bot);
+    return await cm.craftRecipe(recipeName);
   }
 }
 
@@ -139,9 +186,26 @@ class FindFoodAction extends Action {
   }
 
   async execute(context = {}) {
-    const { bot, worldState } = context;
+    const { bot } = context;
     if (!bot || !bot.entity) return { success: false, error: 'Bot not spawned' };
-    return { success: false, error: 'Not implemented' };
+    
+    const rp = new ResourcePlanner(bot);
+    const candidate = rp.findResourceCandidate('FOOD');
+
+    if (candidate && candidate.type === 'entity') {
+      try {
+        const entity = candidate.entity;
+        await bot.pathfinder.goto(new goals.GoalFollow(entity, 2));
+        
+        // Attack the entity
+        bot.attack(entity);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: `Failed to hunt food: ${e.message}` };
+      }
+    }
+
+    return { success: false, error: 'No food sources found nearby' };
   }
 }
 

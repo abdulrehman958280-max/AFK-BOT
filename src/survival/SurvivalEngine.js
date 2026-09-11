@@ -29,7 +29,7 @@ class SurvivalEngine {
 
     // If the top priority is not USER_TASK, we need to generate/continue a survival task
     if (this.highestPriority.goal !== SurvivalPriorityEngine.GOALS.USER_TASK) {
-      if (!this.activeSurvivalTask || this.activeSurvivalTask.name !== this.highestPriority.goal) {
+      if (!this.activeSurvivalTask || this.activeSurvivalTask.metadata.goal !== this.highestPriority.goal) {
         this.activeSurvivalTask = SurvivalTaskPlanner.plan(this.highestPriority.goal, this.currentSurvivalState);
       }
     } else {

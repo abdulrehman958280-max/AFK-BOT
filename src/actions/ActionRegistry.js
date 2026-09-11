@@ -9,6 +9,7 @@ const {
   CraftAction,
   FindFoodAction
 } = require('./SurvivalActions');
+const { ExploreAction, VisitWaypointAction } = require('./NavigationActions');
 
 /**
  * ActionRegistry
@@ -34,6 +35,10 @@ class ActionRegistry {
     this.register(new GatherStoneAction());
     this.register(new CraftAction());
     this.register(new FindFoodAction());
+
+    // Navigation Actions
+    this.register(new ExploreAction());
+    this.register(new VisitWaypointAction());
   }
 
   /**

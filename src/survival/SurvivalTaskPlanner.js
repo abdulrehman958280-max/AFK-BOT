@@ -15,25 +15,25 @@ class SurvivalTaskPlanner {
   static plan(goal, survivalState) {
     switch (goal) {
       case SurvivalPriorityEngine.GOALS.ESCAPE_DANGER:
-        return new Task({ name: 'Escape Danger', metadata: { action: 'ESCAPE' }, priority: 100 });
+        return new Task({ name: 'Escape Danger', metadata: { action: 'ESCAPE', goal }, priority: 100 });
       case SurvivalPriorityEngine.GOALS.FIND_SAFETY:
-        return new Task({ name: 'Find Safe Location', metadata: { action: 'FIND_SAFE_LOCATION' }, priority: 95 });
+        return new Task({ name: 'Find Safe Location', metadata: { action: 'FIND_SAFE_LOCATION', goal }, priority: 95 });
       case SurvivalPriorityEngine.GOALS.EAT:
-        return new Task({ name: 'Eat Food', metadata: { action: 'EAT' }, priority: 85 });
+        return new Task({ name: 'Eat Food', metadata: { action: 'EAT', goal }, priority: 85 });
       case SurvivalPriorityEngine.GOALS.RECOVER_HEALTH:
         // Wait/hide to recover health
-        return new Task({ name: 'Recover Health', metadata: { action: 'RECOVER' }, priority: 90 });
+        return new Task({ name: 'Recover Health', metadata: { action: 'RECOVER', goal }, priority: 90 });
       case SurvivalPriorityEngine.GOALS.FIND_FOOD:
         // Need to hunt or gather food
-        return new Task({ name: 'Find Food', metadata: { action: 'FIND_FOOD' }, priority: 85 });
+        return new Task({ name: 'Find Food', metadata: { action: 'FIND_FOOD', goal }, priority: 85 });
       case SurvivalPriorityEngine.GOALS.GATHER_WOOD:
-        return new Task({ name: 'Gather Wood', metadata: { action: 'GATHER_WOOD' }, priority: 35 });
+        return new Task({ name: 'Gather Wood', metadata: { action: 'GATHER_WOOD', goal }, priority: 35 });
       case SurvivalPriorityEngine.GOALS.GATHER_STONE:
-        return new Task({ name: 'Gather Stone', metadata: { action: 'GATHER_STONE' }, priority: 25 });
+        return new Task({ name: 'Gather Stone', metadata: { action: 'GATHER_STONE', goal }, priority: 25 });
       case SurvivalPriorityEngine.GOALS.CRAFT_BASIC_TOOLS:
-        return new Task({ name: 'Craft Basic Tools', metadata: { action: 'CRAFT', recipe: 'basic_tools' }, priority: 30 });
+        return new Task({ name: 'Craft Basic Tools', metadata: { action: 'CRAFT', recipe: 'basic_tools', goal }, priority: 30 });
       case SurvivalPriorityEngine.GOALS.PREPARE_FOR_NIGHT:
-        return new Task({ name: 'Prepare for Night', metadata: { action: 'FIND_SAFE_LOCATION' }, priority: 40 });
+        return new Task({ name: 'Prepare for Night', metadata: { action: 'FIND_SAFE_LOCATION', goal }, priority: 40 });
       case SurvivalPriorityEngine.GOALS.USER_TASK:
       default:
         return null;
