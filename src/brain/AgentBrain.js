@@ -8,6 +8,7 @@ const ActionExecutor = require('../actions/ActionExecutor');
 const WorldState = require('../perception/WorldState');
 const PerceptionManager = require('../perception/PerceptionManager');
 const BrainLogger = require('../telemetry/BrainLogger');
+const SurvivalEngine = require('../survival/SurvivalEngine');
 
 /**
  * AgentBrain
@@ -36,6 +37,7 @@ class AgentBrain {
       maxHistory: this.options.maxHistory || 100,
       ...(this.options.perception || {})
     });
+    this.survivalEngine = new SurvivalEngine(this.eventBus);
     this.logger = new BrainLogger({ maxEvents: this.options.maxTelemetryEvents });
 
     // Connect logger to event bus
@@ -232,14 +234,25 @@ class AgentBrain {
 
       // 2. Fetch active and queued objectives
       const activeGoal = this.goalManager.getActiveGoal();
-      const activeTask = this.taskManager.getActiveTask();
-      const nextRunnableTask = !activeTask ? this.taskManager.getNextRunnableTask() : null;
+      let activeTask = this.taskManager.getActiveTask();
+      let nextRunnableTask = !activeTask ? this.taskManager.getNextRunnableTask() : null;
+
+      // 3. Evaluate Survival override
+      const survivalResult = this.survivalEngine.evaluate(this.worldState, activeTask || nextRunnableTask);
+      let isSurvivalOverride = false;
+      
+      if (survivalResult.survivalTask) {
+        // Survival task overrides current tasks
+        activeTask = survivalResult.survivalTask;
+        nextRunnableTask = null;
+        isSurvivalOverride = true;
+      }
 
       // Update state mirror
       this.state.setCurrentGoal(activeGoal);
       this.state.setCurrentTask(activeTask || nextRunnableTask);
 
-      // 3. Ask DecisionEngine for decision
+      // 4. Ask DecisionEngine for decision
       const decision = this.decisionEngine.decide({
         state: this.state,
         goal: activeGoal,
@@ -247,7 +260,8 @@ class AgentBrain {
         nextRunnableTask,
         worldState: this.worldState,
         actionRegistry: this.actionRegistry,
-        currentAction: this.actionExecutor.currentAction
+        currentAction: this.actionExecutor.currentAction,
+        isSurvivalOverride
       });
 
       this.state.setDecision(decision);

@@ -9,6 +9,7 @@ const http = require('http');
 const AgentBrain = require('./src/brain/AgentBrain');
 const createBrainRouter = require('./src/api/brainApi');
 const createWorldRouter = require('./src/api/worldApi');
+const createSurvivalRouter = require('./src/api/survivalApi');
 
 // Initialize Autonomous Brain (defaults to AFK mode to preserve legacy behavior)
 const brain = new AgentBrain({
@@ -28,6 +29,7 @@ const PORT = 3000;
 app.use(express.json());
 app.use('/api/brain', createBrainRouter(brain));
 app.use('/api/world', createWorldRouter(brain));
+app.use('/api/survival', createSurvivalRouter(brain));
 
 // Bot state tracking
 let botState = {
@@ -413,6 +415,37 @@ app.get('/', (req, res) => {
             </div>
           </div>
 
+          
+          <!-- CARD 2.5: SURVIVAL ENGINE -->
+          <div class="card" id="card-survival-engine">
+            <h2 class="card-title">
+              <span>Survival Status</span>
+              <span id="survival-status-badge" class="task-pill pill-running">ACTIVE</span>
+            </h2>
+
+            <div class="stat-card">
+              <div class="label">Current Survival Goal</div>
+              <div class="value" id="survival-goal-text">None</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="label">Current Action</div>
+              <div class="value" id="survival-action-text">None</div>
+            </div>
+            
+            <div class="stat-card" style="border-left-color: #f59e0b;">
+              <div class="label">Decision Rationale</div>
+              <div class="value" id="survival-decision-text" style="font-size: 13px; color: #cbd5e1; font-weight: normal; margin-top: 4px;">
+                Evaluating...
+              </div>
+            </div>
+
+            <div class="label" style="margin-top: 8px;">Priorities</div>
+            <div id="survival-priorities-container" style="display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; background: #0f172a; padding: 8px; border-radius: 8px; border: 1px solid #334155;">
+              <div style="color: #64748b; font-size: 12px; padding: 6px;">Loading priorities...</div>
+            </div>
+          </div>
+
           <!-- CARD 3: "What The Bot Sees" / Situational Awareness -->
           <div class="card" id="card-world-perception">
             <h2 class="card-title">
@@ -696,6 +729,43 @@ app.get('/', (req, res) => {
                 const currentTaskName = brainData.currentTask?.name || 'None';
                 taskText.innerText = \`\${currentTaskName} (Action: \${currentActionName})\`;
               }
+
+              
+              // 2.5 Fetch Survival Status
+              try {
+                const survRes = await fetch("/api/survival/status");
+                if (survRes.ok) {
+                  const survData = await survRes.json();
+                  
+                  if (survData.highestPriority) {
+                    document.getElementById("survival-goal-text").innerText = survData.highestPriority.goal;
+                    document.getElementById("survival-decision-text").innerText = survData.highestPriority.reason;
+                  }
+                  
+                  if (survData.activeSurvivalTask) {
+                    document.getElementById("survival-action-text").innerText = survData.activeSurvivalTask.metadata?.action || "Working...";
+                  } else {
+                    document.getElementById("survival-action-text").innerText = "None (Delegated to User Task)";
+                  }
+                }
+                
+                const priRes = await fetch("/api/survival/priorities");
+                if (priRes.ok) {
+                  const priData = await priRes.json();
+                  const priContainer = document.getElementById("survival-priorities-container");
+                  if (priData.priorities && priData.priorities.length > 0) {
+                    priContainer.innerHTML = priData.priorities.map((p, i) => {
+                      const isTop = i === 0;
+                      return \`
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; padding: 4px 6px; background: \${isTop ? 'rgba(45, 212, 191, 0.1)' : 'rgba(255,255,255,0.03)'}; border-radius: 4px; border-left: 2px solid \${isTop ? '#2dd4bf' : 'transparent'};">
+                          <span style="color: \${isTop ? '#2dd4bf' : '#f8fafc'};">\${p.goal}</span>
+                          <span style="color: #94a3b8; font-weight: bold;">\${p.priority}</span>
+                        </div>
+                      \`;
+                    }).join("");
+                  }
+                }
+              } catch(se) { console.warn("Survival state fetch error", se); }
 
               // 3. Fetch World Perception state from /api/world/state
               try {

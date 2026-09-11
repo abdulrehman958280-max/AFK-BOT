@@ -1,4 +1,14 @@
 const { Action, IdleAction, StopAction, PauseAction } = require('./Action');
+const {
+  EatAction,
+  EscapeAction,
+  FindSafeLocationAction,
+  RecoverAction,
+  GatherWoodAction,
+  GatherStoneAction,
+  CraftAction,
+  FindFoodAction
+} = require('./SurvivalActions');
 
 /**
  * ActionRegistry
@@ -14,6 +24,16 @@ class ActionRegistry {
     this.register(new IdleAction());
     this.register(new StopAction());
     this.register(new PauseAction());
+    
+    // Survival Actions
+    this.register(new EatAction());
+    this.register(new EscapeAction());
+    this.register(new FindSafeLocationAction());
+    this.register(new RecoverAction());
+    this.register(new GatherWoodAction());
+    this.register(new GatherStoneAction());
+    this.register(new CraftAction());
+    this.register(new FindFoodAction());
   }
 
   /**
