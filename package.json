@@ -8,7 +8,7 @@
     "build": "node --check index.js",
     "start": "node index.js",
     "lint": "node --check index.js leaveRejoin.js src/brain/*.js src/actions/*.js src/tasks/*.js src/perception/*.js src/telemetry/*.js src/api/*.js test/*.js",
-    "test": "node test/brain.test.js"
+    "test": "node --test test/*.test.js"
   },
   "author": "Lamgerr",
   "license": "MIT",

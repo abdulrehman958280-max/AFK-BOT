@@ -49,13 +49,19 @@ function createBrainRouter(brain) {
         uptime: stateJson.uptime,
         lastActivity: stateJson.lastActivity,
         world: {
-          connected: worldJson.connected,
-          spawned: worldJson.spawned,
-          health: worldJson.health,
-          food: worldJson.food,
+          connected: worldJson.connection?.connected ?? worldJson.connected,
+          spawned: worldJson.connection?.spawned ?? worldJson.spawned,
+          health: worldJson.survival?.health ?? worldJson.health,
+          food: worldJson.survival?.food ?? worldJson.food,
           position: worldJson.position,
-          time: worldJson.time,
-          dimension: worldJson.dimension
+          time: worldJson.environment?.formattedTime || worldJson.time,
+          dimension: worldJson.environment?.dimension || worldJson.dimension,
+          biome: worldJson.environment?.biome || 'unknown',
+          weather: worldJson.environment?.weather || 'clear',
+          threat: worldJson.threats?.level || 'NONE',
+          hostilesCount: worldJson.threats?.hostilesCount || 0,
+          entitiesCount: worldJson.entities?.length || 0,
+          inventoryItemsCount: worldJson.inventory?.summary?.totalCount || 0
         }
       });
     } catch (err) {

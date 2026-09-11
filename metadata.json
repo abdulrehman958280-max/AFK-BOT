@@ -1,6 +1,6 @@
 {
   "name": "Minecraft AFK Bot",
-  "description": "AFK bot for Minecraft servers with live web status dashboard and monitoring",
+  "description": "Autonomous Minecraft survival and AFK agent with real-time world perception, situational awareness, and live monitoring dashboard",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

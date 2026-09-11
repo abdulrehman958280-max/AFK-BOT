@@ -8,6 +8,7 @@ const http = require('http');
 // Autonomous Brain Foundation
 const AgentBrain = require('./src/brain/AgentBrain');
 const createBrainRouter = require('./src/api/brainApi');
+const createWorldRouter = require('./src/api/worldApi');
 
 // Initialize Autonomous Brain (defaults to AFK mode to preserve legacy behavior)
 const brain = new AgentBrain({
@@ -26,6 +27,7 @@ const PORT = 3000;
 
 app.use(express.json());
 app.use('/api/brain', createBrainRouter(brain));
+app.use('/api/world', createWorldRouter(brain));
 
 // Bot state tracking
 let botState = {
@@ -339,12 +341,12 @@ app.get('/', (req, res) => {
             <span id="live-indicator" class="status-dot pulse" style="color: #ef4444;"></span>
             ${config.name}
           </h1>
-          <span class="badge-phase">Phase 1: Autonomous Brain Foundation</span>
+          <span class="badge-phase">Phase 2: World Perception & Situational Awareness</span>
         </div>
 
         <div class="grid-container">
           <!-- CARD 1: Bot Connection & Minecraft Status -->
-          <div class="card">
+          <div class="card" id="card-minecraft-presence">
             <h2 class="card-title">
               <span>Minecraft Presence</span>
               <span id="bot-status-badge" class="task-pill pill-pending">Connecting</span>
@@ -370,7 +372,7 @@ app.get('/', (req, res) => {
               <div class="value" id="uptime-text">0h 0m 0s</div>
             </div>
 
-            <a href="/tutorial" class="btn-guide">View Setup & Deployment Guide</a>
+            <a href="/tutorial" class="btn-guide" id="link-setup-guide">View Setup & Deployment Guide</a>
 
             <div class="connection-bar">
               <div class="connection-fill"></div>
@@ -378,7 +380,7 @@ app.get('/', (req, res) => {
           </div>
 
           <!-- CARD 2: Autonomous Brain Foundation Status -->
-          <div class="card">
+          <div class="card" id="card-autonomous-brain">
             <h2 class="card-title">
               <span>Autonomous Brain</span>
               <span id="brain-state-badge" class="task-pill pill-running">IDLE</span>
@@ -394,8 +396,8 @@ app.get('/', (req, res) => {
             </div>
 
             <div class="stat-card">
-              <div class="label">Current Decision & Reason</div>
-              <div class="value" id="decision-text" style="font-size: 13px; color: #e2e8f0; font-weight: normal;">
+              <div class="label">Current Decision & Situational Reason</div>
+              <div class="value" id="decision-text" style="font-size: 13px; color: #e2e8f0; font-weight: normal; line-height: 1.5;">
                 Evaluating state...
               </div>
             </div>
@@ -411,22 +413,134 @@ app.get('/', (req, res) => {
             </div>
           </div>
 
-          <!-- CARD 3: Task Queue & Management -->
-          <div class="card">
+          <!-- CARD 3: "What The Bot Sees" / Situational Awareness -->
+          <div class="card" id="card-world-perception">
+            <h2 class="card-title">
+              <span>What The Bot Sees</span>
+              <span id="world-threat-badge" class="task-pill pill-running" style="background: #10b981; color: #0f172a; font-weight: 700;">THREAT: NONE</span>
+            </h2>
+
+            <!-- Survival vitals -->
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                  <span class="label">Health</span>
+                  <span id="world-health-val" style="color: #ef4444; font-weight: 600;">20 / 20</span>
+                </div>
+                <div style="background: #0f172a; height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid #334155;">
+                  <div id="world-health-bar" style="background: #ef4444; height: 100%; width: 100%; transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                  <span class="label">Food / Hunger</span>
+                  <span id="world-food-val" style="color: #f59e0b; font-weight: 600;">20 / 20</span>
+                </div>
+                <div style="background: #0f172a; height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid #334155;">
+                  <div id="world-food-bar" style="background: #f59e0b; height: 100%; width: 100%; transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Environment Details -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div class="stat-card" style="padding: 8px 12px;">
+                <div class="label">Time / Sky</div>
+                <div class="value" id="world-time-text" style="font-size: 13px;">Day (06:00)</div>
+              </div>
+              <div class="stat-card" style="padding: 8px 12px;">
+                <div class="label">Weather</div>
+                <div class="value" id="world-weather-text" style="font-size: 13px;">Clear</div>
+              </div>
+              <div class="stat-card" style="padding: 8px 12px;">
+                <div class="label">Biome</div>
+                <div class="value" id="world-biome-text" style="font-size: 13px;">unknown</div>
+              </div>
+              <div class="stat-card" style="padding: 8px 12px;">
+                <div class="label">Dimension</div>
+                <div class="value" id="world-dimension-text" style="font-size: 13px;">overworld</div>
+              </div>
+            </div>
+
+            <!-- Threat details -->
+            <div class="stat-card" style="border-left-color: #f59e0b;">
+              <div class="label">Threat Assessment</div>
+              <div class="value" id="world-threat-reason" style="font-size: 12px; color: #cbd5e1; font-weight: normal; margin-top: 2px;">
+                No immediate threats detected.
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD 4: Nearby Entities & Threat Radar -->
+          <div class="card" id="card-entities-radar">
+            <h2 class="card-title">
+              <span>Nearby Entities Radar</span>
+              <span id="entities-count-badge" style="font-size: 12px; color: #94a3b8;">0 entities</span>
+            </h2>
+
+            <div style="display: flex; gap: 8px;">
+              <div class="stat-card" style="flex: 1; padding: 8px 12px;">
+                <div class="label">Hostile Mobs</div>
+                <div class="value" id="hostiles-count-text" style="font-size: 15px; color: #ef4444;">0</div>
+              </div>
+              <div class="stat-card" style="flex: 1; padding: 8px 12px;">
+                <div class="label">Nearby Players</div>
+                <div class="value" id="players-count-text" style="font-size: 15px; color: #38bdf8;">0</div>
+              </div>
+            </div>
+
+            <div class="label">Observable Entities & Players</div>
+            <div id="entities-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; background: #0f172a; padding: 8px; border-radius: 8px; border: 1px solid #334155;">
+              <div style="color: #64748b; font-size: 12px; text-align: center; padding: 12px;">No entities nearby within perception radius.</div>
+            </div>
+          </div>
+
+          <!-- CARD 5: Inventory & Spatial Blocks -->
+          <div class="card" id="card-inventory-blocks">
+            <h2 class="card-title">
+              <span>Inventory & Spatial Blocks</span>
+              <span id="inventory-capacity-badge" style="font-size: 12px; color: #94a3b8;">0 / 36 slots</span>
+            </h2>
+
+            <!-- Equipment slots -->
+            <div style="background: #0f172a; padding: 8px 12px; border-radius: 8px; border: 1px solid #334155;">
+              <div class="label" style="margin-bottom: 4px;">Equipped Gear</div>
+              <div id="equipment-container" style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px;">
+                <span class="task-pill pill-pending">Hand: Empty</span>
+                <span class="task-pill pill-pending">Armor: None</span>
+              </div>
+            </div>
+
+            <!-- Inventory items -->
+            <div class="label">Inventory Items</div>
+            <div id="inventory-items-container" style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 110px; overflow-y: auto; background: #0f172a; padding: 8px; border-radius: 8px; border: 1px solid #334155;">
+              <div style="color: #64748b; font-size: 12px; padding: 6px;">Inventory empty or not spawned.</div>
+            </div>
+
+            <!-- Interesting nearby blocks -->
+            <div class="label">Nearby Blocks Sampled</div>
+            <div id="blocks-summary-container" style="display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px; background: #0f172a; padding: 8px; border-radius: 8px; border: 1px solid #334155;">
+              <span style="color: #64748b; font-size: 12px;">Scanning radius around agent...</span>
+            </div>
+          </div>
+
+          <!-- CARD 6: Task Queue & Management -->
+          <div class="card" id="card-task-management">
             <h2 class="card-title">
               <span>Task Management</span>
               <span id="task-count-badge" style="font-size: 12px; color: #94a3b8;">0 tasks</span>
             </h2>
 
             <form class="task-form" onsubmit="handleCreateTask(event)">
-              <input id="new-task-name" class="task-input" type="text" placeholder="Task name (e.g. Survey area, Stop bot)" required maxlength="100" />
+              <input id="new-task-name" class="task-input" type="text" placeholder="Task name (e.g. Survey area, Patrol, Standby)" required maxlength="100" />
               <select id="new-task-priority" class="task-select">
                 <option value="10">High (10)</option>
                 <option value="8">Elevated (8)</option>
                 <option value="5" selected>Normal (5)</option>
                 <option value="2">Low (2)</option>
               </select>
-              <button type="submit" class="btn-create-task">+ Create</button>
+              <button type="submit" class="btn-create-task" id="btn-submit-task">+ Create</button>
             </form>
 
             <div class="task-list" id="task-list-container">
@@ -436,14 +550,14 @@ app.get('/', (req, res) => {
             </div>
           </div>
 
-          <!-- CARD 4: Real-Time Brain Activity Feed -->
-          <div class="card">
+          <!-- CARD 7: Real-Time Brain Activity Feed -->
+          <div class="card" id="card-activity-log" style="grid-column: 1 / -1;">
             <h2 class="card-title">
-              <span>Brain Telemetry & Logs</span>
+              <span>Brain Telemetry & Situational Logs</span>
               <span id="log-count-badge" style="font-size: 12px; color: #94a3b8;">Live feed</span>
             </h2>
 
-            <div class="activity-log" id="activity-log-container">
+            <div class="activity-log" id="activity-log-container" style="max-height: 220px;">
               <div style="color: #64748b; text-align: center; padding: 20px;">Connecting to telemetry stream...</div>
             </div>
           </div>
@@ -583,7 +697,124 @@ app.get('/', (req, res) => {
                 taskText.innerText = \`\${currentTaskName} (Action: \${currentActionName})\`;
               }
 
-              // 3. Fetch Tasks
+              // 3. Fetch World Perception state from /api/world/state
+              try {
+                const worldRes = await fetch('/api/world/state');
+                if (worldRes.ok) {
+                  const world = await worldRes.json();
+                  
+                  // Vitals
+                  const healthVal = typeof world.survival?.health === 'number' ? world.survival.health : 20;
+                  const foodVal = typeof world.survival?.food === 'number' ? world.survival.food : 20;
+                  document.getElementById('world-health-val').innerText = \`\${healthVal} / 20\`;
+                  document.getElementById('world-health-bar').style.width = \`\${Math.min(100, Math.max(0, (healthVal / 20) * 100))}%\`;
+                  
+                  document.getElementById('world-food-val').innerText = \`\${foodVal} / 20\`;
+                  document.getElementById('world-food-bar').style.width = \`\${Math.min(100, Math.max(0, (foodVal / 20) * 100))}%\`;
+
+                  // Environment
+                  document.getElementById('world-time-text').innerText = world.environment?.formattedTime || 'Day';
+                  document.getElementById('world-weather-text').innerText = world.environment?.weather ? world.environment.weather.toUpperCase() : 'CLEAR';
+                  document.getElementById('world-biome-text').innerText = world.environment?.biome || 'unknown';
+                  document.getElementById('world-dimension-text').innerText = world.environment?.dimension || 'overworld';
+
+                  // Threats
+                  const threatLevel = world.threats?.level || 'NONE';
+                  const threatBadge = document.getElementById('world-threat-badge');
+                  threatBadge.innerText = \`THREAT: \${threatLevel}\`;
+                  if (threatLevel === 'CRITICAL') {
+                    threatBadge.style.background = '#ef4444';
+                    threatBadge.style.color = '#fff';
+                  } else if (threatLevel === 'HIGH') {
+                    threatBadge.style.background = '#f97316';
+                    threatBadge.style.color = '#fff';
+                  } else if (threatLevel === 'MEDIUM') {
+                    threatBadge.style.background = '#f59e0b';
+                    threatBadge.style.color = '#0f172a';
+                  } else if (threatLevel === 'LOW') {
+                    threatBadge.style.background = '#06b6d4';
+                    threatBadge.style.color = '#0f172a';
+                  } else {
+                    threatBadge.style.background = '#10b981';
+                    threatBadge.style.color = '#0f172a';
+                  }
+
+                  const threatReasons = Array.isArray(world.threats?.reasons) && world.threats.reasons.length > 0
+                    ? world.threats.reasons.join('; ')
+                    : 'No immediate threats detected.';
+                  document.getElementById('world-threat-reason').innerText = threatReasons;
+
+                  // Hostiles & Players counts
+                  document.getElementById('hostiles-count-text').innerText = world.threats?.hostilesCount || 0;
+                  document.getElementById('players-count-text').innerText = world.players?.length || 0;
+                  document.getElementById('entities-count-badge').innerText = \`\${world.entities?.length || 0} entities\`;
+
+                  // Entities list
+                  const entContainer = document.getElementById('entities-list-container');
+                  if (Array.isArray(world.entities) && world.entities.length > 0) {
+                    entContainer.innerHTML = world.entities.slice(0, 8).map(ent => {
+                      const isHostile = ent.classification === 'HOSTILE';
+                      const badgeColor = isHostile ? '#ef4444' : (ent.type === 'player' ? '#38bdf8' : '#2dd4bf');
+                      return \`
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 4px 6px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                          <span><strong style="color: \${badgeColor};">\${ent.name || ent.displayName || ent.type}</strong> \${ent.isSneaking ? '(Sneaking)' : ''}</span>
+                          <span style="color: #94a3b8;">\${ent.distance}m (\${ent.bearing})</span>
+                        </div>
+                      \`;
+                    }).join('');
+                  } else {
+                    entContainer.innerHTML = \`<div style="color: #64748b; font-size: 12px; text-align: center; padding: 12px;">No entities nearby within perception radius.</div>\`;
+                  }
+
+                  // Inventory & Equipment
+                  const invSummary = world.inventory?.summary || {};
+                  document.getElementById('inventory-capacity-badge').innerText = \`\${invSummary.totalCount || 0} items (\${invSummary.emptySlotsCount || 0} slots free)\`;
+
+                  // Equipment
+                  const eq = world.equipment || {};
+                  const eqContainer = document.getElementById('equipment-container');
+                  eqContainer.innerHTML = \`
+                    <span class="task-pill pill-running">Main: \${eq.mainHand ? eq.mainHand.name : 'Empty'}</span>
+                    <span class="task-pill pill-pending">Off: \${eq.offHand ? eq.offHand.name : 'Empty'}</span>
+                    <span class="task-pill pill-pending">Helmet: \${eq.helmet ? eq.helmet.name : 'None'}</span>
+                    <span class="task-pill pill-pending">Chest: \${eq.chestplate ? eq.chestplate.name : 'None'}</span>
+                    <span class="task-pill pill-pending">Legs: \${eq.leggings ? eq.leggings.name : 'None'}</span>
+                    <span class="task-pill pill-pending">Boots: \${eq.boots ? eq.boots.name : 'None'}</span>
+                  \`;
+
+                  // Inventory item chips
+                  const itemsContainer = document.getElementById('inventory-items-container');
+                  if (Array.isArray(world.inventory?.items) && world.inventory.items.length > 0) {
+                    itemsContainer.innerHTML = world.inventory.items.slice(0, 16).map(it => \`
+                      <span style="background: #1e293b; border: 1px solid #334155; padding: 2px 6px; border-radius: 4px; font-size: 11px; color: #2dd4bf;">
+                        \${it.displayName || it.name} <strong style="color: #f8fafc;">x\${it.count}</strong>
+                      </span>
+                    \`).join('');
+                  } else {
+                    itemsContainer.innerHTML = \`<div style="color: #64748b; font-size: 12px; padding: 6px;">Inventory empty or not spawned.</div>\`;
+                  }
+
+                  // Sampled blocks
+                  const blocksContainer = document.getElementById('blocks-summary-container');
+                  const sampleBlocks = world.blocks?.sampled || [];
+                  if (sampleBlocks.length > 0) {
+                    blocksContainer.innerHTML = sampleBlocks.slice(0, 10).map(b => {
+                      const color = b.category === 'DANGER' ? '#ef4444' : (b.category === 'RESOURCE' ? '#2dd4bf' : '#38bdf8');
+                      return \`
+                        <span style="background: #1e293b; border: 1px solid #334155; padding: 2px 6px; border-radius: 4px; color: \${color};">
+                          \${b.name} (\${b.distance}m)
+                        </span>
+                      \`;
+                    }).join('');
+                  } else {
+                    blocksContainer.innerHTML = \`<span style="color: #64748b; font-size: 12px;">No notable hazard/resource blocks in immediate radius.</span>\`;
+                  }
+                }
+              } catch (wErr) {
+                console.warn('World state fetch error', wErr);
+              }
+
+              // 4. Fetch Tasks
               const tasksRes = await fetch('/api/brain/tasks');
               const tasksData = await tasksRes.json();
               const taskContainer = document.getElementById('task-list-container');
@@ -632,7 +863,7 @@ app.get('/', (req, res) => {
                 }
               }
 
-              // 4. Fetch Events/Telemetry
+              // 5. Fetch Events/Telemetry
               const eventsRes = await fetch('/api/brain/events?limit=30');
               const eventsData = await eventsRes.json();
               const logContainer = document.getElementById('activity-log-container');

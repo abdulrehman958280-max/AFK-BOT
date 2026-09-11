@@ -39,6 +39,16 @@ class DecisionEngine {
     const mode = state?.mode || AgentState.MODES.AFK;
     const isBotConnected = Boolean(worldState?.connected && worldState?.spawned);
 
+    // Extract sanitized world observation facts
+    const health = typeof worldState?.survival?.health === 'number' ? worldState.survival.health : (worldState?.health ?? 20);
+    const food = typeof worldState?.survival?.food === 'number' ? worldState.survival.food : (worldState?.food ?? 20);
+    const hostilesCount = worldState?.threats?.hostilesCount || 0;
+    const threatLevel = worldState?.threats?.level || 'NONE';
+    const isNight = worldState?.environment?.isNight ?? (worldState?.time?.isNight ?? false);
+    const timeFormatted = worldState?.environment?.formattedTime || (isNight ? 'Night' : 'Day');
+    const dimension = worldState?.environment?.dimension || (worldState?.dimension || 'overworld');
+    const position = worldState?.player?.position || worldState?.position || null;
+
     let selectedAction = 'IDLE';
     let reason = 'Default idle state';
     let confidence = 1.0;
@@ -47,13 +57,35 @@ class DecisionEngine {
       connected: isBotConnected,
       hasActiveGoal: Boolean(goal),
       hasActiveTask: Boolean(task),
-      hasNextTask: Boolean(nextRunnableTask)
+      hasNextTask: Boolean(nextRunnableTask),
+      world: {
+        health,
+        food,
+        timeOfDay: isNight ? 'night' : 'day',
+        hostileMobsNearby: hostilesCount,
+        threatLevel,
+        dimension,
+        position: position ? `${position.x}, ${position.y}, ${position.z}` : null
+      }
+    };
+
+    // Helper to format situational facts
+    const getSituationalFacts = () => {
+      const facts = [`Health is ${health}/20`];
+      if (hostilesCount > 0) {
+        facts.push(`${hostilesCount} hostile mob${hostilesCount > 1 ? 's' : ''} detected (Threat: ${threatLevel})`);
+      }
+      if (isNight) {
+        facts.push('Night detected');
+      }
+      return facts.join('. ') + '.';
     };
 
     // Branch by operating mode
     if (mode === AgentState.MODES.AFK) {
       selectedAction = 'IDLE';
-      reason = 'AFK mode active: external AFK routines maintain server presence.';
+      const situationalPrefix = isBotConnected ? `${getSituationalFacts()} ` : '';
+      reason = `${situationalPrefix}AFK mode active: external AFK routines maintain server presence.`;
       confidence = 1.0;
     } else if (mode === AgentState.MODES.MANUAL) {
       if (task && task.status === Task.STATUSES.RUNNING) {
@@ -64,7 +96,8 @@ class DecisionEngine {
         confidence = actionEvaluation.confidence;
       } else {
         selectedAction = 'IDLE';
-        reason = 'Manual mode active: standing by for operator instruction or task.';
+        const situationalPrefix = isBotConnected ? `${getSituationalFacts()} ` : '';
+        reason = `${situationalPrefix}Manual mode active: standing by for operator instruction or task.`;
         confidence = 1.0;
       }
     } else if (mode === AgentState.MODES.AUTONOMOUS) {
@@ -87,7 +120,7 @@ class DecisionEngine {
         confidence = 0.9;
       } else {
         selectedAction = 'IDLE';
-        reason = 'No active task in queue; standing by in autonomous standby.';
+        reason = `${getSituationalFacts()} No active task in queue; standing by in autonomous observation.`;
         confidence = 1.0;
       }
     }

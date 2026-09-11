@@ -72,7 +72,15 @@ EventBus.EVENTS = Object.freeze({
   BRAIN_STARTED: 'brain:started',
   BRAIN_PAUSED: 'brain:paused',
   BRAIN_RESUMED: 'brain:resumed',
-  BRAIN_STOPPED: 'brain:stopped'
+  BRAIN_STOPPED: 'brain:stopped',
+  WORLD_UPDATED: 'world:updated',
+  PLAYER_UPDATED: 'player:updated',
+  INVENTORY_UPDATED: 'inventory:updated',
+  ENVIRONMENT_UPDATED: 'environment:updated',
+  ENTITIES_UPDATED: 'entities:updated',
+  THREATS_UPDATED: 'threats:updated',
+  BLOCKS_UPDATED: 'blocks:updated',
+  THREAT_LEVEL_CHANGED: 'threat:levelChanged'
 });
 
 module.exports = EventBus;

@@ -6,6 +6,7 @@ const DecisionEngine = require('./DecisionEngine');
 const ActionRegistry = require('../actions/ActionRegistry');
 const ActionExecutor = require('../actions/ActionExecutor');
 const WorldState = require('../perception/WorldState');
+const PerceptionManager = require('../perception/PerceptionManager');
 const BrainLogger = require('../telemetry/BrainLogger');
 
 /**
@@ -29,7 +30,12 @@ class AgentBrain {
     this.decisionEngine = new DecisionEngine(this.eventBus);
     this.actionRegistry = new ActionRegistry();
     this.actionExecutor = new ActionExecutor(this.actionRegistry, this.eventBus);
-    this.worldState = new WorldState();
+    this.worldState = new WorldState({ maxHistory: this.options.maxHistory || 100 });
+    this.perceptionManager = new PerceptionManager({
+      worldState: this.worldState,
+      maxHistory: this.options.maxHistory || 100,
+      ...(this.options.perception || {})
+    });
     this.logger = new BrainLogger({ maxEvents: this.options.maxTelemetryEvents });
 
     // Connect logger to event bus
@@ -76,7 +82,12 @@ class AgentBrain {
   attachBot(bot) {
     this.bot = bot;
     if (bot) {
-      this.worldState.observe(bot);
+      this.perceptionManager.initialize(bot, this.eventBus);
+      if (this._isRunning && !this._isPaused) {
+        this.perceptionManager.start();
+      }
+    } else {
+      this.detachBot();
     }
   }
 
@@ -85,6 +96,7 @@ class AgentBrain {
    */
   detachBot() {
     this.bot = null;
+    this.perceptionManager.stop();
     this.worldState.observe(null);
   }
 
@@ -105,6 +117,10 @@ class AgentBrain {
     this._isPaused = false;
     this.state.transitionTo(AgentState.STATES.OBSERVING, 'Brain started');
 
+    if (this.bot) {
+      this.perceptionManager.start();
+    }
+
     this.eventBus.emit(EventBus.EVENTS.BRAIN_STARTED, { timestamp: Date.now() });
     this.logger.log('system', { message: 'Brain loop started' });
 
@@ -118,6 +134,7 @@ class AgentBrain {
   pause() {
     if (!this._isRunning || this._isPaused) return false;
     this._isPaused = true;
+    this.perceptionManager.stop();
     this.state.transitionTo(AgentState.STATES.PAUSED, 'Brain paused');
     this.eventBus.emit(EventBus.EVENTS.BRAIN_PAUSED, { timestamp: Date.now() });
     this.logger.log('system', { message: 'Brain loop paused' });
@@ -130,6 +147,9 @@ class AgentBrain {
   resume() {
     if (!this._isRunning || !this._isPaused) return false;
     this._isPaused = false;
+    if (this.bot) {
+      this.perceptionManager.start();
+    }
     this.state.transitionTo(AgentState.STATES.OBSERVING, 'Brain resumed');
     this.eventBus.emit(EventBus.EVENTS.BRAIN_RESUMED, { timestamp: Date.now() });
     this.logger.log('system', { message: 'Brain loop resumed' });
@@ -144,6 +164,8 @@ class AgentBrain {
 
     this._isRunning = false;
     this._isPaused = false;
+
+    this.perceptionManager.stop();
 
     if (this._tickTimer) {
       clearTimeout(this._tickTimer);
@@ -285,6 +307,7 @@ class AgentBrain {
     this.eventBus.destroy();
     this.goalManager.clear();
     this.taskManager.clear();
+    this.perceptionManager.destroy();
     this.detachBot();
   }
 }
